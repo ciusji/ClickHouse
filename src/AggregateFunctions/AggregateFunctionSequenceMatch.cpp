@@ -9,7 +9,6 @@
 
 namespace DB
 {
-struct Settings;
 
 namespace ErrorCodes
 {
@@ -24,7 +23,7 @@ namespace
 
 template <template <typename, typename> typename AggregateFunction, template <typename> typename Data>
 AggregateFunctionPtr createAggregateFunctionSequenceBase(
-    const std::string & name, const DataTypes & argument_types, const Array & params, const Settings *)
+    const std::string & name, const DataTypes & argument_types, const Array & params)
 {
     if (params.size() != 1)
         throw Exception{"Aggregate function " + name + " requires exactly one parameter.",

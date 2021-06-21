@@ -27,7 +27,6 @@ namespace ErrorCodes
     extern const int DICTIONARY_IS_EMPTY;
     extern const int LOGICAL_ERROR;
     extern const int TYPE_MISMATCH;
-    extern const int UNSUPPORTED_METHOD;
 }
 
 namespace
@@ -238,21 +237,11 @@ ColumnPtr IPAddressDictionary::getColumn(
 
         auto column = ColumnProvider::getColumn(dictionary_attribute, size);
 
-        if constexpr (std::is_same_v<ValueType, Array>)
+        if constexpr (std::is_same_v<AttributeType, String>)
         {
             auto * out = column.get();
 
-            getItemsImpl<ValueType>(
-                attribute,
-                key_columns,
-                [&](const size_t, const Array & value) { out->insert(value); },
-                default_value_extractor);
-        }
-        else if constexpr (std::is_same_v<ValueType, StringRef>)
-        {
-            auto * out = column.get();
-
-            getItemsImpl<ValueType>(
+            getItemsImpl<ValueType, ValueType>(
                 attribute,
                 key_columns,
                 [&](const size_t, const StringRef value) { out->insertData(value.data, value.size); },
@@ -262,7 +251,7 @@ ColumnPtr IPAddressDictionary::getColumn(
         {
             auto & out = column->getData();
 
-            getItemsImpl<ValueType>(
+            getItemsImpl<ValueType, ValueType>(
                 attribute,
                 key_columns,
                 [&](const size_t row, const auto value) { return out[row] = value; },
@@ -326,15 +315,8 @@ void IPAddressDictionary::createAttributes()
     auto create_attributes_from_dictionary_attributes = [this](const std::vector<DictionaryAttribute> & dict_attrs)
     {
         attributes.reserve(attributes.size() + dict_attrs.size());
-
         for (const auto & attribute : dict_attrs)
         {
-            if (attribute.is_nullable)
-                throw Exception(ErrorCodes::UNSUPPORTED_METHOD,
-                    "{}: array or nullable attributes not supported for dictionary of type {}",
-                    full_name,
-                    getTypeName());
-
             attribute_index_by_name.emplace(attribute.name, attributes.size());
             attributes.push_back(createAttributeWithType(attribute.underlying_type, attribute.null_value));
 
@@ -601,7 +583,7 @@ const uint8_t * IPAddressDictionary::getIPv6FromOffset(const IPAddressDictionary
     return reinterpret_cast<const uint8_t *>(&ipv6_col[i * IPV6_BINARY_LENGTH]);
 }
 
-template <typename AttributeType, typename ValueSetter, typename DefaultValueExtractor>
+template <typename AttributeType, typename OutputType, typename ValueSetter, typename DefaultValueExtractor>
 void IPAddressDictionary::getItemsByTwoKeyColumnsImpl(
     const Attribute & attribute,
     const Columns & key_columns,
@@ -640,7 +622,7 @@ void IPAddressDictionary::getItemsByTwoKeyColumnsImpl(
                 (*ipv4_col)[*found_it] == addr &&
                 mask_column[*found_it] == mask))
             {
-                set_value(i, vec[row_idx[*found_it]]);
+                set_value(i, static_cast<OutputType>(vec[row_idx[*found_it]]));
             }
             else
                 set_value(i, default_value_extractor[i]);
@@ -676,13 +658,13 @@ void IPAddressDictionary::getItemsByTwoKeyColumnsImpl(
         if (likely(found_it != range.end() &&
             memequal16(getIPv6FromOffset(*ipv6_col, *found_it), target.addr) &&
             mask_column[*found_it] == mask))
-            set_value(i, vec[row_idx[*found_it]]);
+            set_value(i, static_cast<OutputType>(vec[row_idx[*found_it]]));
         else
             set_value(i, default_value_extractor[i]);
     }
 }
 
-template <typename AttributeType, typename ValueSetter, typename DefaultValueExtractor>
+template <typename AttributeType, typename OutputType, typename ValueSetter, typename DefaultValueExtractor>
 void IPAddressDictionary::getItemsImpl(
     const Attribute & attribute,
     const Columns & key_columns,
@@ -695,7 +677,7 @@ void IPAddressDictionary::getItemsImpl(
     // special case for getBlockInputStream
     if (unlikely(key_columns.size() == 2))
     {
-        getItemsByTwoKeyColumnsImpl<AttributeType>(
+        getItemsByTwoKeyColumnsImpl<AttributeType, OutputType>(
             attribute, key_columns, std::forward<ValueSetter>(set_value), default_value_extractor);
         query_count.fetch_add(rows, std::memory_order_relaxed);
         return;
@@ -715,7 +697,7 @@ void IPAddressDictionary::getItemsImpl(
             auto found = tryLookupIPv4(addrv4, addrv6_buf);
             if (found != ipNotFound())
             {
-                set_value(i, vec[*found]);
+                set_value(i, static_cast<OutputType>(vec[*found]));
                 ++keys_found;
             }
             else
@@ -733,7 +715,7 @@ void IPAddressDictionary::getItemsImpl(
             auto found = tryLookupIPv6(reinterpret_cast<const uint8_t *>(addr.data));
             if (found != ipNotFound())
             {
-                set_value(i, vec[*found]);
+                set_value(i, static_cast<OutputType>(vec[*found]));
                 ++keys_found;
             }
             else
@@ -952,9 +934,7 @@ void registerDictionaryTrie(DictionaryFactory & factory)
                              const DictionaryStructure & dict_struct,
                              const Poco::Util::AbstractConfiguration & config,
                              const std::string & config_prefix,
-                             DictionarySourcePtr source_ptr,
-                             ContextConstPtr /* context */,
-                             bool /*created_from_ddl*/) -> DictionaryPtr
+                             DictionarySourcePtr source_ptr) -> DictionaryPtr
     {
         if (!dict_struct.key || dict_struct.key->size() != 1)
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "Dictionary of layout 'ip_trie' has to have one 'key'");

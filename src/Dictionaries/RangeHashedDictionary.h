@@ -127,8 +127,7 @@ private:
             Float32,
             Float64,
             UUID,
-            StringRef,
-            Array>
+            StringRef>
             null_values;
         std::variant<
             Ptr<UInt8>,
@@ -150,8 +149,7 @@ private:
             Ptr<Float32>,
             Ptr<Float64>,
             Ptr<UUID>,
-            Ptr<StringRef>,
-            Ptr<Array>>
+            Ptr<StringRef>>
             maps;
         std::unique_ptr<Arena> string_arena;
     };
@@ -170,7 +168,7 @@ private:
 
     static Attribute createAttribute(const DictionaryAttribute& attribute, const Field & null_value);
 
-    template <typename AttributeType, typename ValueSetter, typename DefaultValueExtractor>
+    template <typename AttributeType, typename OutputType, typename ValueSetter, typename DefaultValueExtractor>
     void getItemsImpl(
         const Attribute & attribute,
         const Columns & key_columns,

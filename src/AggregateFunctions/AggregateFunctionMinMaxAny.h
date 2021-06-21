@@ -15,8 +15,6 @@
 
 namespace DB
 {
-struct Settings;
-
 namespace ErrorCodes
 {
     extern const int ILLEGAL_TYPE_OF_ARGUMENT;
@@ -637,7 +635,7 @@ struct AggregateFunctionAnyLastData : Data
 template <typename Data>
 struct AggregateFunctionAnyHeavyData : Data
 {
-    UInt64 counter = 0;
+    size_t counter = 0;
 
     using Self = AggregateFunctionAnyHeavyData;
 

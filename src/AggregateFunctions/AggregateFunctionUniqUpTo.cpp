@@ -11,8 +11,6 @@
 namespace DB
 {
 
-struct Settings;
-
 namespace ErrorCodes
 {
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
@@ -26,7 +24,7 @@ namespace
 constexpr UInt8 uniq_upto_max_threshold = 100;
 
 
-AggregateFunctionPtr createAggregateFunctionUniqUpTo(const std::string & name, const DataTypes & argument_types, const Array & params, const Settings *)
+AggregateFunctionPtr createAggregateFunctionUniqUpTo(const std::string & name, const DataTypes & argument_types, const Array & params)
 {
     UInt8 threshold = 5;    /// default value
 
